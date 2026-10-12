@@ -1,0 +1,33 @@
+# =====================================================================
+# Netplan de la VM Backend PARA LA INTEGRACIÓN (PC de Josué).
+# NO aplicar en la PC de desarrollo: quita la salida a internet por NAT.
+# Se copia a /etc/netplan/ y se aplica con: sudo netplan try
+# En YAML los ESPACIOS importan (como en Python): no uses tabulaciones.
+# =====================================================================
+network:
+  version: 2
+  ethernets:
+    # NIC1: conectada a la red interna "trunk" de VirtualBox.
+    # No lleva IP propia: solo "transporta" la VLAN 30.
+    enp0s17:
+      dhcp4: false
+      dhcp6: false
+    # NIC2: solo-anfitrión, para administrar la VM por SSH (igual que hoy).
+    enp0s8:
+      dhcp4: false
+      addresses: [192.168.56.21/24]
+  vlans:
+    # Interfaz virtual que etiqueta el tráfico con VLAN 30 (SERVERS).
+    vlan30:
+      id: 30                      # número de VLAN (tabla maestra)
+      link: enp0s17               # viaja por la NIC1
+      addresses:
+        - 10.30.0.10/24           # IPv4 de la VM Backend (tabla maestra)
+        - "fd00:0:0:30::10/64"    # IPv6 ULA de la VM Backend (tabla maestra)
+      routes:
+        - to: default             # todo lo que no sea red local sale por pfSense (IPv4)
+          via: 10.30.0.1
+        - to: "::/0"              # lo mismo para IPv6
+          via: "fd00:0:0:30::1"
+      nameservers:
+        addresses: [10.30.0.1]    # DNS: el Unbound de pfSense (resuelve portal.prepago.lan)
