@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<!-- =====================================================================
+     index.html - TIENDA del portal (la sirve la API Flask en "/")
+     Integrante B: José Díaz.
+     4 pantallas: 1) Planes  2) Registro  3) Pago  4) Confirmación
+     Llama a la API con rutas relativas (/api/...) -> mismo servidor, sin CORS.
+     ===================================================================== -->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Comprar plan de internet</title>
+<style>
+  /* Mismo estilo que splash.html para que se sienta como un solo sistema. */
+  body{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;margin:0;
+       display:flex;min-height:100vh;align-items:center;justify-content:center}
+  .card{background:#1e293b;padding:2rem;border-radius:12px;width:min(92vw,420px)}
+  /* font:inherit = cajas y botones con el mismo tamaño de letra que la página. */
+  input,button{font:inherit}
+  input{width:100%;padding:.7rem;margin:.35rem 0;border-radius:8px;border:1px solid #475569;
+        background:#0f172a;color:#fff;box-sizing:border-box}
+  button{width:100%;padding:.8rem;margin-top:.5rem;border:0;border-radius:8px;
+         background:#22c55e;color:#04210f;font-weight:700;cursor:pointer}
+  /* Botón deshabilitado (mientras se espera respuesta): semitransparente. */
+  button:disabled{opacity:.5;cursor:wait}
+  /* Botones de los planes: gris y texto a la izquierda. */
+  .plan{background:#334155;color:#e2e8f0;text-align:left}
+  /* Botones con aspecto de enlace ("Ya tengo cuenta", "Cambiar de plan"). */
+  .link{background:none;color:#93c5fd;font-weight:400;text-decoration:underline;padding:.4rem}
+  /* Todas las pantallas ocultas; solo se ve la que tenga la clase "on". */
+  .step{display:none} .step.on{display:block}
+  .sub{color:#94a3b8;margin-top:0}
+  .scan{display:block;margin:.4rem 0;font-size:.9rem;color:#93c5fd}
+  /* Zona de mensajes: rojo para errores, azul para información. */
+  #status{min-height:1.4em;margin-top:.8rem} .error{color:#fca5a5} .info{color:#93c5fd}
+</style>
+</head>
+<body>
+<main class="card">
+  <h1>Internet Prepago</h1>
+
+  <!-- ===== PANTALLA 1: elegir plan (los botones se crean con JavaScript) ===== -->
+  <section id="s1" class="step on">
+    <h2>1. Elige tu plan</h2>
+    <div id="planes"></div>
+  </section>
+
+  <!-- ===== PANTALLA 2: crear cuenta ===== -->
+  <section id="s2" class="step">
+    <h2>2. Crea tu cuenta</h2>
+    <p id="plan2" class="sub"></p>
+    <!-- autocapitalize="none": el celular no pone mayúscula al inicio del usuario. -->
+    <input id="u" placeholder="Usuario (a-z, 0-9, _)" maxlength="20" autocapitalize="none" autocomplete="username">
+    <input id="e" type="email" placeholder="Correo" autocomplete="email">
+    <input id="t" type="tel" placeholder="Teléfono (opcional)" maxlength="20">
+    <input id="p" type="password" placeholder="Contraseña (mín. 8)" autocomplete="new-password">
+    <button id="btnreg" onclick="register()">Continuar al pago</button>
+    <button class="link" onclick="yaTengoCuenta()">Ya tengo cuenta: solo quiero recargar</button>
+    <button class="link" onclick="show(1)">← Cambiar de plan</button>
+  </section>
+
+  <!-- ===== PANTALLA 3: pago ===== -->
+  <section id="s3" class="step">
+    <h2>3. Pago</h2>
+    <p id="resumen" class="sub"></p>
+    <!-- Abre la cámara trasera del celular (capture="environment") para fotografiar la tarjeta. -->
+    <label class="scan">📷 Escanear tarjeta con la cámara (opcional)
+      <input id="foto" type="file" accept="image/*" capture="environment" onchange="scanCard()">
+    </label>
+    <!-- El nombre NO se envía a la API: es solo para que la pantalla se parezca a un pago real. -->
+    <input id="nombre" placeholder="Nombre en la tarjeta" autocomplete="cc-name">
+    <input id="card" inputmode="numeric" placeholder="Número de tarjeta" maxlength="19" autocomplete="cc-number">
+    <input id="cardexp" inputmode="numeric" placeholder="Vencimiento MM/AA" maxlength="5" autocomplete="cc-exp">
+    <input id="cvv" inputmode="numeric" placeholder="CVV" maxlength="4" autocomplete="cc-csc">
+    <button id="btnpay" onclick="pay()">Pagar</button>
+  </section>
+
+  <!-- ===== PANTALLA 4: confirmación ===== -->
+  <section id="s4" class="step">
+    <h2>¡Pago aprobado! ✅</h2>
+    <p>Referencia: <b id="ref"></b></p>
+    <p>Tu plan vence: <b id="exp"></b></p>
+    <p>Ahora inicia sesión con tu <b>usuario</b> y <b>contraseña</b> en la página del portal.</p>
+    <!-- neverssl.com es un sitio HTTP a propósito: al abrirlo, pfSense intercepta la
+         petición y muestra la página de login (splash.html). -->
+    <button onclick="location.href='http://neverssl.com'">Ir a iniciar sesión</button>
+  </section>
+
+  <!-- Mensajes para el usuario. role="alert" hace que los lectores de pantalla lo lean. -->
+  <p id="status" role="alert"></p>
+</main>
+
+<script>
+// ---------- Utilidades ----------
+// Atajo: $("u") en lugar de document.getElementById("u").
+const $ = id => document.getElementById(id);
+
+// "Memoria" de la página: lo que el cliente ha elegido hasta ahora.
+const state = {plan: null, planName: "", price: 0, username: null};
+
+// Muestra solo la pantalla n (1 a 4): quita "on" a todas y se la pone a la elegida.
+function show(n) {
+  document.querySelectorAll(".step").forEach(s => s.classList.remove("on"));
+  $("s" + n).classList.add("on");
+}
+
+// Escribe un mensaje abajo. kind = "error" (rojo), "info" (azul) o "" (sin color).
+// Se usa textContent (no innerHTML) para que nadie pueda inyectar código en la página.
+function setStatus(msg, kind) {
+  $("status").textContent = msg;
+  $("status").className = kind || "";
+}
+
+// Llama a la API. Sin "body" hace un GET; con "body" hace un POST enviando JSON.
+// Si la API responde con error, lanza una excepción con el mensaje en español de la API.
+async function api(path, body) {
+  let r;
+  try {
+    r = await fetch(path, {
+      method: body ? "POST" : "GET",
+      headers: {"Content-Type": "application/json"},
+      body: body ? JSON.stringify(body) : undefined   // convierte el objeto a texto JSON
+    });
+  } catch (e) {
+    // fetch solo falla aquí si NO hubo respuesta (sin red, servidor apagado).
+    throw new Error("No hay conexión con el servidor.");
+  }
+  // Intenta leer la respuesta como JSON; si no se puede, usa un mensaje genérico.
+  const j = await r.json().catch(() => ({message: "Respuesta inválida del servidor."}));
+  if (!r.ok) throw new Error(j.message || "Error " + r.status);  // r.ok = código 200-299
+  return j;
+}
+
+// ---------- Pantalla 1: cargar los planes desde la API ----------
+async function loadPlans() {
+  try {
+    const plans = await api("/api/plans");
+    // Object.entries convierte {"1h": {...}, "1d": {...}} en pares [clave, plan].
+    for (const [key, p] of Object.entries(plans)) {
+      const b = document.createElement("button");     // crea un botón nuevo
+      b.className = "plan";
+      b.textContent = p.name + " — Q" + p.price.toFixed(2);   // ej. "1 hora — Q5.00"
+      // Al hacer clic: guarda el plan elegido y pasa a la pantalla 2.
+      b.onclick = () => {
+        state.plan = key; state.planName = p.name; state.price = p.price;
+        $("plan2").textContent = "Plan elegido: " + p.name + " (Q" + p.price.toFixed(2) + ")";
+        setStatus(""); show(2);
+      };
+      $("planes").appendChild(b);                     // lo agrega a la página
+    }
+  } catch (e) { setStatus(e.message, "error"); }
+}
+
+// Pasa a la pantalla de pago mostrando el resumen.
+function goToPay() {
+  $("resumen").textContent = "Plan: " + state.planName + " (Q" + state.price.toFixed(2) +
+                             ") | Usuario: " + state.username;
+  setStatus(""); show(3);
+}
+
+// ---------- Pantalla 2: registro ----------
+async function register() {
+  $("btnreg").disabled = true;                 // evita doble clic mientras se espera
+  setStatus("Creando cuenta...", "info");
+  try {
+    const r = await api("/api/register", {
+      username: $("u").value.trim(), email: $("e").value.trim(),
+      phone: $("t").value.trim(), password: $("p").value
+    });
+    state.username = r.username;               // el usuario tal como lo guardó la API (minúsculas)
+    goToPay();
+  } catch (e) { setStatus(e.message, "error"); }
+  $("btnreg").disabled = false;
+}
+
+// "Ya tengo cuenta": salta al pago usando solo el usuario escrito arriba.
+// (La API comprobará que exista; si no, mostrará "Usuario no registrado".)
+function yaTengoCuenta() {
+  const u = $("u").value.trim().toLowerCase();
+  // Misma regla que la API: 4-20 caracteres a-z, 0-9 o _.
+  if (!/^[a-z0-9_]{4,20}$/.test(u)) {
+    setStatus("Escribe tu usuario en la primera casilla y vuelve a tocar \"Ya tengo cuenta\".", "error");
+    return;
+  }
+  state.username = u;
+  goToPay();
+}
+
+// ---------- Pantalla 3: escanear tarjeta (OCR de Jhonatan) ----------
+async function scanCard() {
+  const file = $("foto").files[0];             // la foto elegida o tomada
+  if (!file) return;
+  setStatus("Leyendo tarjeta...", "info");
+  // FormData = formulario con archivo (la API lo recibe en request.files["image"]).
+  const fd = new FormData();
+  fd.append("image", file);
+  try {
+    const r = await fetch("/api/scan-card", {method: "POST", body: fd});
+    const j = await r.json().catch(() => ({message: "Respuesta inválida del servidor."}));
+    if (!r.ok) throw new Error(j.message || "Error " + r.status);
+    // El OCR solo RELLENA el formulario: el cliente revisa y confirma.
+    $("card").value = j.card_number;
+    if (j.expiry) $("cardexp").value = j.expiry;
+    setStatus("Tarjeta leída" + (j.expiry ? " (vence " + j.expiry + ")" : "") +
+              ". Revisa el número antes de pagar.", "info");
+  } catch (e) { setStatus(e.message, "error"); }
+  $("foto").value = "";                        // permite volver a elegir la misma foto
+}
+
+// Pone la "/" del vencimiento automáticamente: "1229" -> "12/29".
+$("cardexp").addEventListener("input", ev => {
+  let v = ev.target.value.replace(/\D/g, "").slice(0, 4);   // solo dígitos, máximo 4
+  if (v.length > 2) v = v.slice(0, 2) + "/" + v.slice(2);
+  ev.target.value = v;
+});
+
+// ---------- Pantalla 3: pagar ----------
+async function pay() {
+  $("btnpay").disabled = true;
+  setStatus("Procesando pago...", "info");
+  try {
+    const r = await api("/api/pay", {
+      username: state.username, plan: state.plan,
+      card_number: $("card").value, expiry: $("cardexp").value, cvv: $("cvv").value
+    });
+    // Éxito: muestra referencia y vencimiento en la pantalla 4.
+    $("ref").textContent = r.reference;
+    $("exp").textContent = r.expires_at;
+    setStatus(""); show(4);
+  } catch (e) {
+    // Error (tarjeta inválida, rechazada...): se queda en la pantalla 3 para reintentar.
+    setStatus(e.message, "error");
+  }
+  $("btnpay").disabled = false;
+}
+
+// Al abrir la página: cargar los planes.
+loadPlans();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+Archivo: /etc/freeradius/3.0/mods-available/sql  (enlazado en mods-enabled/sql)
+
+Valores cambiados (quitar el # inicial donde aplique):
+    driver    = "rlm_sql_mysql"
+    dialect   = "mysql"
+    server    = "localhost"
+    port      = 3306
+    login     = "radius"
+    password  = "CAMBIAR_CLAVE_BD"
+    radius_db = "radius"
+
+Además: se comentó (#) el bloque  tls { ... }  dentro de  mysql { }
+porque apunta a certificados que no existen y FreeRADIUS no conectaba a MariaDB.

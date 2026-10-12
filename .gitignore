@@ -1,0 +1,10 @@
+# Entorno virtual de Python (se recrea con: pip install -r requirements.txt)
+venv/
+# Archivos compilados de Python
+__pycache__/
+*.pyc
+# Archivos con secretos reales (solo se suben los .example)
+*.env
+prepago.env
+# Socket de control de gunicorn (por si acaso)
+*.ctl

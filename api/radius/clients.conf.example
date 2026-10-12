@@ -1,0 +1,7 @@
+# Bloque a agregar AL FINAL de /etc/freeradius/3.0/clients.conf
+# El secreto real se acuerda con A (pfSense) y NO se sube al repositorio.
+client pfsense {
+    ipaddr    = 10.30.0.1
+    secret    = CAMBIAR_SECRETO_RADIUS
+    shortname = pfsense
+}

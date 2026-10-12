@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<!-- =====================================================================
+     splash.html - Página de LOGIN del portal cautivo (la muestra pfSense)
+     Integrante B: José Díaz.
+     IMPORTANTE: pfSense busca los nombres exactos auth_user, auth_pass,
+     accept, redirurl y zone. NO los cambies o el login dejará de funcionar.
+     ===================================================================== -->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<!-- Hace que la página se vea bien en celulares (ancho = ancho de la pantalla). -->
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Internet Prepago</title>
+<style>
+  /* Fondo oscuro y la tarjeta centrada en la pantalla (flexbox). */
+  body{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;margin:0;
+       display:flex;min-height:100vh;align-items:center;justify-content:center}
+  /* La "tarjeta" del formulario. min(92vw,380px) = 92% del ancho en celular, máximo 380 px. */
+  .card{background:#1e293b;padding:2rem;border-radius:12px;width:min(92vw,380px)}
+  /* Cajas de texto a todo lo ancho. */
+  input{width:100%;padding:.7rem;margin:.4rem 0;border-radius:8px;border:1px solid #475569;
+        background:#0f172a;color:#fff;box-sizing:border-box}
+  input{font:inherit}
+  /* Botón verde "Conectar" y enlace con forma de botón. */
+  .btn,input[type=submit]{display:block;width:100%;padding:.8rem;margin-top:.6rem;border:0;
+        border-radius:8px;background:#22c55e;color:#04210f;font-weight:700;text-align:center;
+        text-decoration:none;cursor:pointer;box-sizing:border-box}
+  /* Variante azul para el botón de la tienda. */
+  .btn.alt{background:#38bdf8}
+  /* Mensajes de error de pfSense en rojo claro. */
+  .msg{color:#fca5a5;min-height:1.2em}
+  .help{font-size:.85rem;color:#94a3b8;margin-top:1rem}
+</style>
+</head>
+<body>
+<main class="card">
+  <h1>Internet Prepago</h1>
+  <p>Ingresa con tu cuenta para navegar.</p>
+
+  <!-- pfSense reemplaza esta variable por un mensaje de error (o la deja vacía). -->
+  <p class="msg">$PORTAL_MESSAGE$</p>
+
+  <!-- El formulario se envía (POST) a la dirección que pfSense pone en esta variable. -->
+  <form method="post" action="$PORTAL_ACTION$">
+    <!-- Usuario y contraseña: pfSense los pasa a FreeRADIUS para validarlos. -->
+    <input name="auth_user" type="text" placeholder="Usuario" required
+           autocomplete="username" autocapitalize="none">
+    <input name="auth_pass" type="password" placeholder="Contraseña" required
+           autocomplete="current-password">
+    <!-- Campos ocultos que pfSense necesita (a dónde volver y en qué zona está). -->
+    <input name="redirurl" type="hidden" value="$PORTAL_REDIRURL$">
+    <input name="zone" type="hidden" value="$PORTAL_ZONE$">
+    <!-- El botón DEBE llamarse "accept". -->
+    <input name="accept" type="submit" value="Conectar">
+  </form>
+
+  <!-- Enlace a la tienda (permitida sin pagar gracias a "Allowed IP Addresses" en pfSense).
+       Es HTTP a propósito: modo B de la demo (ver decisión (i) del proyecto). -->
+  <a class="btn alt" href="http://portal.prepago.lan/">Comprar plan / Registrarse</a>
+
+  <p class="help">¿Aún no tienes cuenta? Toca "Comprar plan", elige un plan y paga.
+     Luego regresa aquí e ingresa con tu usuario y contraseña.</p>
+</main>
+</body>
+</html>

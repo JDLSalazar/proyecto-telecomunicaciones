@@ -1,0 +1,24 @@
+[Unit]
+# Descripción que aparece en "systemctl status". %i = el puerto (5001 o 5002).
+Description=Prepago API instancia %i
+# Arrancar después de que haya red y de que MariaDB esté encendida.
+After=network.target mariadb.service
+
+[Service]
+# Usuario sin privilegios con el que corre la API (más seguro que root).
+User=prepago
+# Carpeta donde está app.py.
+WorkingDirectory=/opt/prepago
+# Carga las variables secretas (DB_PASS, DASH_TOKEN...).
+EnvironmentFile=/etc/prepago.env
+# Nombre de la instancia: aparecerá en /health como "5001" o "5002".
+Environment=INSTANCE=%i
+# Arranca Gunicorn con 2 procesos (-w 2) escuchando en todas las IPs IPv4 e IPv6
+# ([::]) en el puerto %i. "app:app" = archivo app.py, variable app.
+ExecStart=/opt/prepago/venv/bin/gunicorn -w 2 -b [::]:%i --no-control-socket app:app
+# Si el programa se cae por cualquier motivo, systemd lo vuelve a arrancar.
+Restart=always
+
+[Install]
+# Arrancar automáticamente al encender la VM.
+WantedBy=multi-user.target
