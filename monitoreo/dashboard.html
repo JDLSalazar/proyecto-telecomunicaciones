@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<!-- =====================================================================
+     dashboard.html - Dashboard en tiempo real (Nivel 2, sin IA)
+     Se abre con /dashboard?key=CLAVE. Pide /api/metrics cada 5 segundos y
+     dibuja tarjetas y gráficas (sin librerías externas: canvas de HTML5).
+     ===================================================================== -->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard - Internet Prepago</title>
+<style>
+  /* ---- Colores con nombre (variables CSS): se cambian en un solo lugar ---- */
+  :root{
+    --bg:#0f172a; --card:#1e293b; --line:#334155;           /* fondo, tarjetas, cuadrícula */
+    --text:#e2e8f0; --text2:#94a3b8;                         /* texto principal y secundario */
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;  /* series de las gráficas (validadas para daltonismo) */
+    --ok:#4ade80; --bad:#f87171;                             /* estados UP / DOWN */
+  }
+  *{box-sizing:border-box}
+  body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:1rem}
+  header{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:baseline;justify-content:space-between;margin-bottom:1rem}
+  h1{margin:0;font-size:1.3rem}
+  #estado{font-size:.85rem;color:var(--text2)}
+  /* Cuadrícula que se acomoda sola: en celular 1 columna, en PC varias. */
+  .grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+  .wide{grid-column:1/-1}                                    /* tarjeta que ocupa todo el ancho */
+  .card{background:var(--card);border-radius:12px;padding:1rem;position:relative}
+  .card h2{margin:0 0 .7rem;font-size:.8rem;letter-spacing:.05em;color:var(--text2);font-weight:600}
+  .big{font-size:2rem;font-weight:700;line-height:1.1}
+  .row{display:flex;justify-content:space-between;gap:1rem;margin:.3rem 0}
+  .muted{color:var(--text2);font-size:.8rem}
+  .up{color:var(--ok)} .down{color:var(--bad)}
+  /* Las gráficas ocupan todo el ancho de su tarjeta; la altura es fija. */
+  canvas{width:100%;height:200px;display:block;cursor:crosshair}
+  .legend{display:flex;flex-wrap:wrap;gap:.3rem 1rem;margin-top:.5rem;font-size:.85rem;color:var(--text2)}
+  .legend b{color:var(--text);font-weight:600}
+  .sw{display:inline-block;width:12px;height:3px;border-radius:2px;vertical-align:middle;margin-right:.35rem}
+  /* Cuadro flotante que aparece al pasar el mouse sobre una gráfica. */
+  .tip{position:absolute;pointer-events:none;background:#0b1222;border:1px solid var(--line);border-radius:8px;
+       padding:.4rem .6rem;font-size:.8rem;white-space:nowrap;display:none;z-index:2}
+  details{margin-top:1rem} summary{cursor:pointer;color:var(--text2)}
+  table{border-collapse:collapse;width:100%;font-size:.8rem;margin-top:.5rem}
+  th,td{padding:.25rem .4rem;text-align:right;border-bottom:1px solid var(--line)}
+  th:first-child,td:first-child{text-align:left}
+</style>
+</head>
+<body>
+<header>
+  <h1>Dashboard - Internet Prepago</h1>
+  <span id="estado">conectando...</span>
+</header>
+
+<div class="grid">
+  <div class="card"><h2>DISPONIBILIDAD DEL SERVICIO</h2>
+    <div class="big" id="avail">-</div>
+    <div class="muted">últimas <span id="nmuestras">0</span> muestras (~5 min)</div>
+    <div class="row" style="margin-top:.6rem"><span>Instancia 5001</span><b id="i5001">-</b></div>
+    <div class="row"><span>Instancia 5002</span><b id="i5002">-</b></div></div>
+
+  <div class="card"><h2>SERVICIOS Y UPTIME</h2>
+    <div class="row"><span>FreeRADIUS</span><b id="srad">-</b></div>
+    <div class="row"><span>MariaDB</span><b id="sdb">-</b></div>
+    <div class="row"><span>Servidor backend</span><b id="upbk">-</b></div>
+    <div class="row"><span>pfSense</span><b id="upfw">sin SNMP</b></div></div>
+
+  <div class="card"><h2>NEGOCIO</h2>
+    <div class="row"><span>Usuarios registrados</span><b id="users">-</b></div>
+    <div class="row"><span>Planes vigentes</span><b id="active">-</b></div>
+    <div class="row"><span>Pagos aprobados</span><b id="pok">-</b></div>
+    <div class="row"><span>Pagos fallidos</span><b id="pbad">-</b></div>
+    <div class="row"><span>Ingresos (simulados)</span><b id="rev">-</b></div></div>
+
+  <div class="card wide"><h2>LATENCIA (ms)</h2>
+    <canvas id="cLat"></canvas><div class="tip" id="tLat"></div>
+    <div class="legend" id="lLat"></div></div>
+
+  <div class="card wide"><h2>ANCHO DE BANDA · <span id="bwsrc">-</span></h2>
+    <canvas id="cBw"></canvas><div class="tip" id="tBw"></div>
+    <div class="legend" id="lBw"></div>
+    <details><summary>Ver los últimos valores en tabla</summary><div id="tabla"></div></details></div>
+</div>
+
+<script>
+// ---------- Configuración ----------
+const KEY = new URLSearchParams(location.search).get("key") || "";  // la clave viene en la dirección
+const N = 60;              // cuántas muestras se guardan (60 x 5 s = 5 minutos)
+const EVERY = 5000;        // cada cuántos milisegundos se piden métricas (5 s)
+const $ = id => document.getElementById(id);
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+// Historial de cada serie (listas de hasta N números; null = sin dato en ese momento).
+const H = {t: [], gw: [], gw6: [], net: [], api: [], rx: [], tx: [], up: []};
+let prev = null;           // lectura anterior de bytes (para calcular la velocidad)
+
+// Agrega un valor al final de una lista y borra el más viejo si pasa de N.
+const push = (a, v) => { a.push(v); if (a.length > N) a.shift(); };
+
+// ---------- Formatos de texto ----------
+function fmtTime(s) {                    // segundos -> "1d 3h 25m"
+  if (s == null) return "-";
+  s = Math.floor(s);
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  return (d ? d + "d " : "") + h + "h " + m + "m";
+}
+function fmtBps(b) {                     // bits por segundo -> "1.25 Mbit/s"
+  if (b == null) return "-";
+  if (b >= 1e6) return (b / 1e6).toFixed(2) + " Mbit/s";
+  if (b >= 1e3) return (b / 1e3).toFixed(1) + " kbit/s";
+  return b.toFixed(0) + " bit/s";
+}
+function niceStep(v) {                   // redondea un número a 1, 2, 2.5 o 5 x potencia de 10
+  if (v <= 0) return 0.25;
+  const p = Math.pow(10, Math.floor(Math.log10(v))), n = v / p;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p;
+}
+function fmtBpsAxis(b) {                 // versión corta para el eje: "7.5 Mb/s"
+  const short = (x, u) => (x < 10 && x % 1 ? x.toFixed(1) : x.toFixed(0)) + " " + u;
+  if (b >= 1e6) return short(b / 1e6, "Mb/s");
+  if (b >= 1e3) return short(b / 1e3, "kb/s");
+  return short(b, "b/s");
+}
+
+// Estado con símbolo + palabra (no solo color, para personas daltónicas).
+function badge(el, ok, extra) {
+  if (ok == null) { el.textContent = "-"; el.className = ""; return; }
+  el.textContent = (ok ? "● UP" : "✕ DOWN") + (ok && extra ? " · " + extra : "");
+  el.className = ok ? "up" : "down";
+}
+
+// ---------- Gráfica de líneas en un canvas ----------
+// series = [{name, color, data:[...]}]; fmt = función que da formato a un valor.
+const charts = {};
+function draw(id, series, fmt, hover = -1) {
+  // Formato corto para los números del eje (para que quepan en el margen izquierdo).
+  const axisFmt = fmt === fmtBps ? fmtBpsAxis : v => (v % 1 ? v.toFixed(v < 1 ? 2 : 1) : v.toFixed(0));
+  const cv = $(id), ctx = cv.getContext("2d");
+  // Ajusta la resolución interna al tamaño real en pantalla (nítido en celulares).
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth, Hh = cv.clientHeight;
+  if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(Hh * dpr); }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, Hh);
+
+  const L = 64, R = 8, T = 8, B = 20;              // márgenes: izquierda (para números), etc.
+  const pw = W - L - R, ph = Hh - T - B;           // tamaño del área de dibujo
+  const vals = series.flatMap(s => s.data.filter(v => v != null));
+  // Escala del eje Y: 4 divisiones de un tamaño "bonito" (ej. 10, 20, 30, 40).
+  const step = niceStep(Math.max(0, ...vals) * 1.1 / 4), max = step * 4;
+  const X = i => L + pw * i / (N - 1);             // posición x de la muestra i
+  const Y = v => T + ph - (v / max) * ph;          // posición y de un valor
+  charts[id] = {series, fmt, X, L, pw};             // se guarda para el mouse
+
+  // Cuadrícula horizontal (4 líneas) con su valor a la izquierda.
+  ctx.font = "12px system-ui"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (let k = 0; k <= 4; k++) {
+    const v = max * k / 4, y = Y(v);
+    ctx.strokeStyle = css("--line"); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(W - R, y); ctx.stroke();
+    ctx.fillStyle = css("--text2"); ctx.fillText(axisFmt(v), L - 6, y);
+  }
+  // Eje de tiempo: a la izquierda "hace 5 min", a la derecha "ahora".
+  ctx.textBaseline = "alphabetic";
+  ctx.textAlign = "left"; ctx.fillText("hace 5 min", L, Hh - 4);
+  ctx.textAlign = "right"; ctx.fillText("ahora", W - R, Hh - 4);
+
+  // Las líneas: se dibujan alineadas a la DERECHA (lo más nuevo siempre en "ahora").
+  series.forEach(s => {
+    const off = N - s.data.length;
+    ctx.strokeStyle = s.color; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.beginPath(); let started = false;
+    s.data.forEach((v, i) => {
+      if (v == null) { started = false; return; }   // sin dato: la línea se corta
+      const x = X(i + off), y = Y(v);
+      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  });
+
+  // Si el mouse está encima: línea vertical y puntos en esa muestra.
+  if (hover >= 0) {
+    ctx.strokeStyle = css("--text2"); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(X(hover), T); ctx.lineTo(X(hover), T + ph); ctx.stroke();
+    series.forEach(s => {
+      const v = s.data[hover - (N - s.data.length)];
+      if (v == null) return;
+      ctx.fillStyle = s.color; ctx.strokeStyle = css("--card"); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(X(hover), Y(v), 4, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+    });
+  }
+}
+
+// Leyenda debajo de cada gráfica: color + nombre + valor actual.
+function legend(id, series, fmt) {
+  $(id).innerHTML = "";
+  series.forEach(s => {
+    const span = document.createElement("span");
+    const last = s.data.length ? s.data[s.data.length - 1] : null;
+    span.innerHTML = '<i class="sw"></i>';
+    span.firstChild.style.background = s.color;
+    span.append(s.name + " ");
+    const b = document.createElement("b"); b.textContent = fmt(last); span.append(b);
+    $(id).append(span);
+  });
+}
+
+// Mouse sobre una gráfica: muestra el cuadro con los valores de ese momento.
+function hookHover(canvasId, tipId) {
+  const cv = $(canvasId), tip = $(tipId);
+  cv.addEventListener("mousemove", ev => {
+    const c = charts[canvasId]; if (!c) return;
+    const rect = cv.getBoundingClientRect(), x = ev.clientX - rect.left;
+    const i = Math.round((x - c.L) / c.pw * (N - 1));         // muestra más cercana al mouse
+    if (i < 0 || i >= N) { tip.style.display = "none"; return; }
+    draw(canvasId, c.series, c.fmt, i);
+    const ago = (N - 1 - i) * EVERY / 1000;
+    tip.innerHTML = "";
+    const head = document.createElement("div"); head.className = "muted";
+    head.textContent = ago ? "hace " + ago + " s" : "ahora"; tip.append(head);
+    c.series.forEach(s => {
+      const v = s.data[i - (N - s.data.length)];
+      const row = document.createElement("div");
+      row.innerHTML = '<i class="sw"></i>'; row.firstChild.style.background = s.color;
+      row.append(s.name + ": " + c.fmt(v)); tip.append(row);
+    });
+    tip.style.display = "block";
+    const left = Math.min(x + cv.offsetLeft + 12, cv.offsetLeft + cv.clientWidth - tip.offsetWidth);
+    tip.style.left = left + "px"; tip.style.top = (cv.offsetTop + 8) + "px";
+  });
+  cv.addEventListener("mouseleave", () => {
+    tip.style.display = "none";
+    const c = charts[canvasId]; if (c) draw(canvasId, c.series, c.fmt);
+  });
+}
+hookHover("cLat", "tLat"); hookHover("cBw", "tBw");
+
+// ---------- Dibujar todo con los datos actuales ----------
+function render() {
+  const latS = [
+    {name: "pfSense IPv4", color: css("--s1"), data: H.gw},
+    {name: "pfSense IPv6", color: css("--s2"), data: H.gw6},
+    {name: "Internet",     color: css("--s3"), data: H.net},
+    {name: "API",          color: css("--s4"), data: H.api}];
+  const fmtLat = v => v == null ? "sin respuesta" : v.toFixed(1) + " ms";
+  draw("cLat", latS, fmtLat); legend("lLat", latS, fmtLat);
+
+  const bwS = [
+    {name: "Entrada ↓", color: css("--s1"), data: H.rx},
+    {name: "Salida ↑",  color: css("--s2"), data: H.tx}];
+  draw("cBw", bwS, fmtBps); legend("lBw", bwS, fmtBps);
+
+  // Tabla accesible con las últimas 10 muestras (lo más nuevo arriba).
+  let html = "<table><tr><th>Hora</th><th>pfSense v4</th><th>pfSense v6</th><th>Internet</th><th>API</th><th>Entrada</th><th>Salida</th></tr>";
+  for (let i = H.t.length - 1; i >= Math.max(0, H.t.length - 10); i--) {
+    const off = H.rx.length - H.t.length;                      // la velocidad empieza una muestra después
+    const cell = v => v == null ? "-" : v.toFixed(1);
+    html += `<tr><td>${H.t[i]}</td><td>${cell(H.gw[i])}</td><td>${cell(H.gw6[i])}</td><td>${cell(H.net[i])}</td>` +
+            `<td>${cell(H.api[i])}</td><td>${fmtBps(H.rx[i + off])}</td><td>${fmtBps(H.tx[i + off])}</td></tr>`;
+  }
+  $("tabla").innerHTML = html + "</table>";
+}
+
+// ---------- Pedir métricas a la API (cada 5 s) ----------
+async function tick() {
+  try {
+    const r = await fetch("/api/metrics?key=" + encodeURIComponent(KEY), {cache: "no-store"});
+    if (r.status === 403) { $("estado").textContent = "Clave incorrecta: abre /dashboard?key=TU_CLAVE"; return; }
+    if (!r.ok) throw new Error(r.status);
+    const m = await r.json();
+    const now = new Date().toLocaleTimeString();
+    $("estado").textContent = "actualizado " + now + " · respondió la instancia " + m.instance;
+
+    // Disponibilidad: el SERVICIO está arriba si AL MENOS UNA instancia responde.
+    const i1 = m.instances["5001"], i2 = m.instances["5002"];
+    badge($("i5001"), i1.up, i1.ms + " ms"); badge($("i5002"), i2.up, i2.ms + " ms");
+    push(H.up, (i1.up || i2.up) ? 1 : 0);
+    $("avail").textContent = (100 * H.up.reduce((a, b) => a + b, 0) / H.up.length).toFixed(1) + " %";
+    $("nmuestras").textContent = H.up.length;
+
+    badge($("srad"), m.services.freeradius); badge($("sdb"), m.services.mariadb);
+    $("upbk").textContent = fmtTime(m.backend_uptime_s);
+    $("upfw").textContent = m.pfsense ? fmtTime(m.pfsense.uptime_s) : "sin SNMP";
+    if (m.app) {
+      $("users").textContent = m.app.users_total; $("active").textContent = m.app.active_plans;
+      $("pok").textContent = m.app.payments_ok;   $("pbad").textContent = m.app.payments_failed;
+      $("rev").textContent = "Q" + m.app.revenue.toFixed(2);
+    }
+
+    push(H.t, now);
+    push(H.gw, m.latency.gateway_ms); push(H.gw6, m.latency.gateway6_ms); push(H.net, m.latency.internet_ms);
+    push(H.api, i1.ms != null ? i1.ms : i2.ms);
+
+    // Ancho de banda: pfSense por SNMP si existe; si no, la interfaz de esta VM.
+    let rx = null, tx = null, src;
+    if (m.pfsense) { rx = m.pfsense.in_octets; tx = m.pfsense.out_octets; src = "pfSense " + m.pfsense.iface + " (SNMP)"; }
+    else if (m.backend_net.rx_bytes != null) { rx = m.backend_net.rx_bytes; tx = m.backend_net.tx_bytes; src = "servidor backend, " + m.backend_net.iface; }
+    $("bwsrc").textContent = src || "sin datos";
+    if (rx != null) {
+      // Velocidad = (bytes ahora - bytes antes) x 8 bits / segundos transcurridos.
+      if (prev && prev.src === src && m.ts > prev.ts && rx >= prev.rx && tx >= prev.tx) {
+        const dt = m.ts - prev.ts;
+        push(H.rx, (rx - prev.rx) * 8 / dt); push(H.tx, (tx - prev.tx) * 8 / dt);
+      }
+      prev = {src, ts: m.ts, rx, tx};
+    }
+    render();
+  } catch (e) {
+    $("estado").textContent = "sin conexión con la API (" + new Date().toLocaleTimeString() + ")";
+    push(H.up, 0); $("avail").textContent = (100 * H.up.reduce((a, b) => a + b, 0) / H.up.length).toFixed(1) + " %";
+  }
+}
+window.addEventListener("resize", render);       // redibuja si cambia el tamaño de la ventana
+tick(); setInterval(tick, EVERY);
+</script>
+</body>
+</html>
