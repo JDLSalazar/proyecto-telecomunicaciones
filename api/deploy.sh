@@ -19,17 +19,17 @@ cp "$REPO/portal/index.html"    /opt/prepago/static/index.html
 cp "$REPO/portal/splash.html"   /opt/prepago/static/splash.html
 
 # --- Archivos de C (Jhonatan): se copian SOLO si ya existen en el repositorio ---
-# "if [ -f archivo ]" = "si el archivo existe".
-if [ -f "$REPO/ocr/ocr_card.py" ]; then
-  cp "$REPO/ocr/ocr_card.py" /opt/prepago/
+# Carpetas según la estructura que creó Josué: ia/ (OCR) y monitoreo/ (dashboard).
+if [ -f "$REPO/ia/ocr_card.py" ]; then
+  cp "$REPO/ia/ocr_card.py" /opt/prepago/
   echo "  + ocr_card.py"
 fi
-if [ -f "$REPO/dashboard/metrics.py" ]; then
-  cp "$REPO/dashboard/metrics.py" /opt/prepago/
+if [ -f "$REPO/monitoreo/metrics.py" ]; then
+  cp "$REPO/monitoreo/metrics.py" /opt/prepago/
   echo "  + metrics.py"
 fi
-if [ -f "$REPO/dashboard/dashboard.html" ]; then
-  cp "$REPO/dashboard/dashboard.html" /opt/prepago/static/
+if [ -f "$REPO/monitoreo/dashboard.html" ]; then
+  cp "$REPO/monitoreo/dashboard.html" /opt/prepago/static/
   echo "  + dashboard.html"
 fi
 
