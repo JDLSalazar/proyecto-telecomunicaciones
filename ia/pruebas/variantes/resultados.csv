@@ -1,0 +1,14 @@
+archivo,condicion,esperado,leido,vencimiento,segundos,acerto
+v01_original.png,Limpia (generada),4242424242004242,4242424242004242,12/29,0.61,sí
+v02_rotada5.png,Torcida 5 grados,4242424242004242,4242424242004242,12/29,1.10,sí
+v03_rotada12.png,Torcida 12 grados,4242424242004242,,,1.21,no
+v04_borrosa.png,Desenfocada (leve),4242424242004242,4242424242004242,12/29,0.42,sí
+v05_muyborrosa.png,Desenfocada (fuerte),4242424242004242,4242424242004242,,1.03,sí
+v06_oscura.png,Poca luz,4242424242004242,4242424242004242,12/29,0.78,sí
+v07_ruido.png,Poca luz con ruido,4242424242004242,4242424242004242,12/29,0.83,sí
+v08_pequena.png,Muy pequeña (de lejos),4242424242004242,4242424242004242,12/29,0.78,sí
+v09_reflejo.png,Reflejo sobre el número,4242424242004242,,12/29,1.51,no
+v10_mesa.jpg,Sobre una mesa (foto grande),4242424242004242,4242424242004242,,0.77,sí
+v11_jpeg_baja.jpg,JPEG de baja calidad,4242424242004242,4242424242004242,12/29,0.76,sí
+
+TOTAL,,,,,,9/11 (82 %)

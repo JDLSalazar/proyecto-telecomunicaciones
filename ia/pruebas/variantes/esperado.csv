@@ -1,0 +1,12 @@
+archivo,condicion,esperado
+v01_original.png,Limpia (generada),4242424242004242
+v02_rotada5.png,Torcida 5 grados,4242424242004242
+v03_rotada12.png,Torcida 12 grados,4242424242004242
+v04_borrosa.png,Desenfocada (leve),4242424242004242
+v05_muyborrosa.png,Desenfocada (fuerte),4242424242004242
+v06_oscura.png,Poca luz,4242424242004242
+v07_ruido.png,Poca luz con ruido,4242424242004242
+v08_pequena.png,Muy pequeña (de lejos),4242424242004242
+v09_reflejo.png,Reflejo sobre el número,4242424242004242
+v10_mesa.jpg,Sobre una mesa (foto grande),4242424242004242
+v11_jpeg_baja.jpg,JPEG de baja calidad,4242424242004242
