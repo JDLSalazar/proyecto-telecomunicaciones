@@ -14,7 +14,7 @@ Contrato con app.py:
 """
 import io                                   # tratar los bytes de la foto como si fueran un archivo
 import re                                   # expresiones regulares: buscar patrones en el texto
-from PIL import Image, ImageOps             # Pillow: abrir y transformar imágenes
+from PIL import Image, ImageOps, ImageStat  # Pillow: abrir, transformar y medir imágenes
 import pytesseract                          # puente entre Python y el programa Tesseract
 
 # Configuración de Tesseract:
@@ -89,7 +89,7 @@ def variants(gray):
                                                    #    y las tarjetas suelen ser al revés
     # 3) Blanco y negro puro: cada píxel se vuelve negro o blanco según si supera
     #    el brillo promedio. Ayuda con fondos con dibujos o sombras.
-    avg = sum(gray.getdata()) / (gray.width * gray.height)
+    avg = ImageStat.Stat(gray).mean[0]            # brillo promedio de la imagen (0 a 255)
     bw = gray.point(lambda p: 255 if p > avg else 0)
     yield ImageOps.invert(bw)
 

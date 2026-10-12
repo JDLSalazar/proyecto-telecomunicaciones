@@ -278,6 +278,12 @@ try:
 except ImportError:
     metrics = None
 
+@app.errorhandler(413)
+def too_large(e):
+    """Flask lanza el error 413 cuando lo enviado supera MAX_CONTENT_LENGTH (6 MB).
+    En lugar de su página HTML de error, respondemos JSON con el formato de siempre."""
+    return err("La foto es demasiado grande (máximo 6 MB).", "IMAGE_TOO_LARGE", 413)
+
 @app.post("/api/scan-card")
 def scan_card():
     """Recibe la FOTO de la tarjeta, la lee con OCR y devuelve número y vencimiento.
