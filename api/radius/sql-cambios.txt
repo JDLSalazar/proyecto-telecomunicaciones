@@ -23,3 +23,6 @@ porque apunta a certificados que no existen y FreeRADIUS no conectaba a MariaDB.
       }
   Motivo: que el portal muestre al cliente que su plan venció (pfSense lo pone en $PORTAL_MESSAGE$).
   Respaldo del original: /etc/freeradius/3.0/sites-available/default.bak
+- clients.conf (client pfsense): require_message_authenticator = no y limit_proxy_state = no.
+  Motivo: pfSense no envía Message-Authenticator (alerta BlastRADIUS, CVE-2024-3596).
+  Mitigación: el tráfico RADIUS solo viaja por la VLAN 30 (SERVERS), inaccesible desde USERS.

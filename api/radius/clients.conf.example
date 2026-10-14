@@ -4,4 +4,6 @@ client pfsense {
     ipaddr    = 10.30.0.1
     secret    = CAMBIAR_SECRETO_RADIUS
     shortname = pfsense
+    require_message_authenticator = no   # pfSense no envía Message-Authenticator (BlastRADIUS); mitigado: RADIUS solo en VLAN 30 aislada
+    limit_proxy_state = no               # no hay proxies RADIUS en medio
 }

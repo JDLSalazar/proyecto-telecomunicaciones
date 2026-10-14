@@ -1,6 +1,5 @@
 # =====================================================================
-# Netplan de la VM Backend PARA LA INTEGRACIÓN (PC de Josué).
-# NO aplicar en la PC de desarrollo: quita la salida a internet por NAT.
+# Netplan de la VM Backend PARA LA INTEGRACIÓN (laptop de presentacion).
 # Se copia a /etc/netplan/ y se aplica con: sudo netplan try
 # En YAML los ESPACIOS importan (como en Python): no uses tabulaciones.
 # =====================================================================
