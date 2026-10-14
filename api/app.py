@@ -31,6 +31,7 @@ INSTANCE = os.environ.get("INSTANCE", "dev")
 # Un "diccionario": cada clave ("1h", "1d", "7d") tiene su nombre, precio en quetzales
 # y duración en segundos (3600 s = 1 hora, 86400 s = 1 día, 604800 s = 7 días).
 PLANS = {
+    "5m": {"name": "5 minutos (prueba)", "price": 1.00, "seconds": 300},   # plan corto para probar el vencimiento
     "1h": {"name": "1 hora", "price": 5.00,  "seconds": 3600},
     "1d": {"name": "1 día",  "price": 15.00, "seconds": 86400},
     "7d": {"name": "7 días", "price": 80.00, "seconds": 604800},
